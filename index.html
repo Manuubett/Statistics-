@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Performance Dashboard</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" />
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .dashboard-title {
+      font-weight: bold;
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    .card h5 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .card p {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+    .table thead th {
+      background-color: #007bff;
+      color: white;
+    }
+    .btn-group-custom {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body class="p-4">
+  <div class="container-fluid">
+    <div class="text-center mb-4">
+      <div class="dashboard-title">📊 Admin Performance Stats</div>
+    </div>
+
+    <div class="btn-group-custom">
+      <select id="adminSelect" class="form-control w-auto">
+        <option>-- Select Admin to Reset --</option>
+      </select>
+      <button class="btn btn-primary" onclick="resetSelectedAdmin()">Reset Selected Admin</button>
+      <button class="btn btn-danger" onclick="resetAllAdmins()">Reset All Admins</button>
+    </div>
+
+    <div class="table-responsive mb-5">
+      <table class="table table-bordered text-center">
+        <thead>
+          <tr>
+            <th>Admin Name</th>
+            <th>✅ Right</th>
+            <th>❌ Wrong</th>
+            
+            <th>💰 Total Earn</th>
+          </tr>
+        </thead>
+        <tbody id="adminTable"></tbody>
+      </table>
+    </div>
+
+    <div class="row mb-5" id="stats"></div>
+
+    <h4 class="mb-3">🏆 Top Users</h4>
+    <ul id="topUsers" class="list-group mb-5"></ul>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+    import {
+      getFirestore, collection, getDocs, deleteDoc, doc, query, where
+    } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBTmeDxIUhua52KDAoag23q9MuNEOQXYQg",
+      authDomain: "prediction-94bf9.firebaseapp.com",
+      projectId: "prediction-94bf9",
+      storageBucket: "prediction-94bf9.appspot.com",
+      messagingSenderId: "960123689722",
+      appId: "1:960123689722:web:c707337a7b6972a3478743"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function generateStats() {
+      const statsContainer = document.getElementById("stats");
+      const topUsersList = document.getElementById("topUsers");
+      const adminTable = document.getElementById("adminTable");
+      const adminSelect = document.getElementById("adminSelect");
+
+      const predSnap = await getDocs(collection(db, "predictions"));
+      const likeSnap = await getDocs(collection(db, "prediction_likes"));
+
+      let total = 0, correct = 0, wrong = 0;
+      const userStats = {};
+      const userCounts = {};
+      const likesCount = {};
+
+      predSnap.forEach(doc => {
+        const p = doc.data();
+        total++;
+
+        const username = p.username || "Unknown";
+
+        if (!userStats[username]) {
+          userStats[username] = { right: 0, wrong: 0, deleted: 0 };
+        }
+
+        if (p.result === "correct") {
+          correct++;
+          userStats[username].right++;
+        } else if (p.result === "wrong") {
+          wrong++;
+          userStats[username].wrong++;
+        } else if (p.result === "deleted") {
+          userStats[username].deleted++;
+        }
+
+        userCounts[username] = userCounts[username] ? userCounts[username] + 1 : 1;
+      });
+
+      likeSnap.forEach(doc => {
+        const { predictionId } = doc.data();
+        likesCount[predictionId] = (likesCount[predictionId] || 0) + 1;
+      });
+
+      const pending = total - correct - wrong;
+      const accuracy = total > 0 ? ((correct / total) * 100).toFixed(1) : "0";
+
+      statsContainer.innerHTML = `
+        <div class="col-md-3"><div class="card bg-primary text-white mb-3"><div class="card-body"><h5>Total</h5><p>${total}</p></div></div></div>
+        <div class="col-md-3"><div class="card bg-success text-white mb-3"><div class="card-body"><h5>Correct</h5><p>${correct}</p></div></div></div>
+        <div class="col-md-3"><div class="card bg-danger text-white mb-3"><div class="card-body"><h5>Wrong</h5><p>${wrong}</p></div></div></div>
+        <div class="col-md-3"><div class="card bg-secondary text-white mb-3"><div class="card-body"><h5>Pending</h5><p>${pending}</p></div></div></div>
+        <div class="col-md-3"><div class="card bg-info text-white mb-3"><div class="card-body"><h5>Accuracy</h5><p>${accuracy}%</p></div></div></div>
+      `;
+
+      adminTable.innerHTML = '';
+      adminSelect.innerHTML = `<option>-- Select Admin to Reset --</option>`;
+
+      Object.entries(userStats).forEach(([username, stats]) => {
+        const earnings = stats.right * 10;
+        adminTable.innerHTML += `
+          <tr>
+            <td>${username}</td>
+            <td>${stats.right}</td>
+            <td>${stats.wrong}</td>
+            
+            <td>Ksh ${earnings}</td>
+          </tr>
+        `;
+        adminSelect.innerHTML += `<option value="${username}">${username}</option>`;
+      });
+
+      const topUsers = Object.entries(userCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      topUsersList.innerHTML = topUsers
+        .map(([name, count]) =>
+          `<li class="list-group-item d-flex justify-content-between align-items-center">${name}<span class="badge badge-primary badge-pill">${count}</span></li>`
+        )
+        .join("");
+    }
+
+    // Reset Selected Admin// Reset Selected Admin (permanent deletion)
+window.resetSelectedAdmin = async function () {
+  const selected = document.getElementById("adminSelect").value;
+  if (!selected || selected === "-- Select Admin to Reset --") return;
+
+  const q = query(collection(db, "predictions"), where("username", "==", selected));
+  const snap = await getDocs(q);
+
+  const deletions = snap.docs.map(docSnap => deleteDoc(doc(db, "predictions", docSnap.id)));
+  await Promise.all(deletions);
+
+  alert(`All predictions for ${selected} have been permanently deleted.`);
+  generateStats();
+};
+
+// Reset All Admins (permanent deletion)
+window.resetAllAdmins = async function () {
+  if (!confirm("Are you sure you want to permanently delete ALL predictions?")) return;
+
+  const snap = await getDocs(collection(db, "predictions"));
+  const deletions = snap.docs.map(docSnap => deleteDoc(doc(db, "predictions", docSnap.id)));
+  await Promise.all(deletions);
+
+  alert("All predictions have been permanently deleted.");
+  generateStats();
+};
+    
+
+    generateStats();
+  </script>
+</body>
+      </html>
