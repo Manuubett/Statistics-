@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Verification Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-dark: #0d5cb6;
+      --secondary: #34a853;
+      --light-bg: #f8f9fa;
+      --border: #e0e0e0;
+      --text: #202124;
+      --text-light: #5f6368;
+    }
+    
+    body {
+      background-color: #f0f2f5;
+      color: var(--text);
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      padding-bottom: 40px;
+    }
+    
+    .dashboard-header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 20px 0;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .card {
+      border-radius: 10px;
+      border: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card {
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .stat-number {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin: 10px 0;
+    }
+    
+    .stat-label {
+      font-size: 0.9rem;
+      color: var(--text-light);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .message-card {
+      border-left: 4px solid var(--border);
+      background: var(--light-bg);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .verified {
+      border-left-color: var(--secondary);
+      background: rgba(52, 168, 83, 0.08);
+    }
+    
+    .message-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--border);
+    }
+    
+    .verified::before {
+      background: var(--secondary);
+    }
+    
+    .message-content {
+      font-family: 'Courier New', monospace;
+      background: rgba(255,255,255,0.7);
+      padding: 15px;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      margin: 10px 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .action-bar {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    
+    .search-box {
+      flex-grow: 1;
+      max-width: 300px;
+    }
+    
+    .stats-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .status-badge {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    
+    .badge-pending {
+      background: #fef3e2;
+      color: #f59e0b;
+    }
+    
+    .badge-verified {
+      background: #ecfdf3;
+      color: var(--secondary);
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    
+    .empty-state i {
+      font-size: 3rem;
+      color: #dadce0;
+      margin-bottom: 20px;
+    }
+    
+    .timestamp {
+      color: var(--text-light);
+      font-size: 0.85rem;
+    }
+    
+    .pagination-controls {
+      display: flex;
+      justify-content: center;
+      margin-top: 25px;
+    }
+    
+    .pagination-info {
+      text-align: center;
+      margin-top: 10px;
+      color: var(--text-light);
+      font-size: 0.9rem;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .select-all-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-header">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center flex-wrap">
+        <div>
+          <h1 class="h3 mb-0"><i class="fas fa-money-check-alt me-2"></i>M-PESA Verification Panel</h1>
+          <p class="mb-0 opacity-75">Admin dashboard to verify payment submissions</p>
+        </div>
+        <div class="d-flex align-items-center">
+          <div class="me-3">
+            <img src="https://ui-avatars.com/api/?name=Admin+User&background=ffffff&color=1a73e8&size=40" class="rounded-circle" alt="Admin">
+          </div>
+          <div>
+            <div class="fw-medium">Admin User</div>
+            <div class="small opacity-75">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><p style="font-size: 18px; line-height: 1.6; color: #333;">
+  
+
+<!-- Stylish Button with Community Emojis -->
+
+
+  <div class="container">
+    <div class="stats-container">
+      <div class="card stat-card">
+        <div class="stat-number">128</div>
+        <div class="stat-label">Total Submissions</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">94</div>
+        <div class="stat-label">Verified Payments</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">34</div>
+        <div class="stat-label">Pending Review</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">7</div>
+        <div class="stat-label">Today's Submissions</div>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <div class="d-flex align-items-center flex-wrap gap-3">
+        <div class="select-all-container">
+          <input type="checkbox" id="selectAll" class="form-check-input">
+          <label for="selectAll" class="form-check-label small">Select all</label>
+        </div>
+        <div class="search-box">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" class="form-control" placeholder="Search messages...">
+          </div>
+        </div>
+      </div>
+      <div class="action-buttons">
+        <button class="btn btn-outline-primary">
+          <i class="fas fa-filter me-1"></i> Filters
+        </button>
+        <button class="btn btn-danger" onclick="deleteSelected()">
+          <i class="fas fa-trash-alt me-1"></i> Delete Selected
+        </button>
+        <button class="btn btn-success">
+          <i class="fas fa-file-export me-1"></i> Export
+        </button>
+      </div>
+    </div>
+
+    <div id="messages">
+      <!-- Messages will be loaded here -->
+      <div class="card message-card">
+        <div class="d-flex justify-content-between">
+          <div>
+            <span class="status-badge badge-pending">Pending</span>
+            <h5 class="mt-2">Payment Submission</h5>
+            <div class="message-content">
+              FV8H8A5K8G Confirmed. Ksh3,000.00 sent to COMPANY LTD on 15/6/25 at 9:45 AM. 
+              New M-PESA balance is Ksh12,456.00. Transaction cost, Ksh0.00.
+            </div>
+            <div class="timestamp">Received: June 15, 2025, 9:46 AM</div>
+          </div>
+          <div class="d-flex flex-column justify-content-between align-items-end">
+            <input type="checkbox" class="form-check-input">
+            <button class="btn btn-primary mt-2">
+              <i class="fas fa-check-circle me-1"></i> Verify
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card message-card verified">
+        <div class="d-flex justify-content-between">
+          <div>
+            <span class="status-badge badge-verified">Verified</span>
+            <h5 class="mt-2">Payment Submission</h5>
+            <div class="message-content">
+              MQS9D2F1G3 Confirmed. Ksh5,500.00 paid to COMPANY LTD on 14/6/25 at 3:22 PM. 
+              New M-PESA balance is Ksh7,220.00. Transaction cost, Ksh0.00.
+            </div>
+            <div class="timestamp">Verified: June 14, 2025, 3:30 PM</div>
+          </div>
+          <div class="d-flex flex-column justify-content-between align-items-end">
+            <input type="checkbox" class="form-check-input">
+            <button class="btn btn-success mt-2" disabled>
+              <i class="fas fa-check-circle me-1"></i> Verified
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pagination-controls">
+      <nav>
+        <ul class="pagination">
+          <li class="page-item disabled"><a class="page-link" href="#"><i class="fas fa-chevron-left"></i></a></li>
+          <li class="page-item active"><a class="page-link" href="#">1</a></li>
+          <li class="page-item"><a class="page-link" href="#">2</a></li>
+          <li class="page-item"><a class="page-link" href="#">3</a></li>
+          <li class="page-item"><a class="page-link" href="#"><i class="fas fa-chevron-right"></i></a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="pagination-info">Showing 1-10 of 128 submissions</div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBTmeDxIUhua52KDAoag23q9MuNEOQXYQg",
+      authDomain: "prediction-94bf9.firebaseapp.com",
+      databaseURL: "https://prediction-94bf9-default-rtdb.firebaseio.com",
+      projectId: "prediction-94bf9",
+      storageBucket: "prediction-94bf9.firebasestorage.app",
+      messagingSenderId: "960123689722",
+      appId: "1:960123689722:web:ca9579625439ecf2478743",
+      measurementId: "G-MTDJTB6JXG"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const container = document.getElementById('messages');
+
+    function loadMessages() {
+      db.ref('submissions').on('value', snapshot => {
+        const data = snapshot.val();
+        container.innerHTML = '';
+
+        if (!data) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <h4>No submissions found</h4>
+              <p class="text-muted">When new M-PESA submissions arrive, they will appear here</p>
+            </div>
+          `;
+          return;
+        }
+
+        const sorted = Object.entries(data).sort((a, b) => b[1].timestamp - a[1].timestamp);
+
+        sorted.forEach(([id, entry]) => {
+          const div = document.createElement('div');
+          div.className = 'card message-card mb-3' + (entry.verified ? ' verified' : '');
+          
+          div.innerHTML = `
+            <div class="d-flex justify-content-between">
+              <div>
+                <span class="status-badge ${entry.verified ? 'badge-verified' : 'badge-pending'}">
+                  ${entry.verified ? 'Verified' : 'Pending'}
+                </span>
+                <h5 class="mt-2">Payment Submission</h5>
+                <div class="message-content">${entry.message}</div>
+                <div class="timestamp">${entry.verified ? 'Verified: ' : 'Received: '}${new Date(entry.timestamp).toLocaleString()}</div>
+              </div>
+              <div class="d-flex flex-column justify-content-between align-items-end">
+                <input type="checkbox" class="form-check-input select-checkbox" value="${id}">
+                <button class="btn ${entry.verified ? 'btn-success' : 'btn-primary'} mt-2" 
+                        onclick="${entry.verified ? '' : `verifyMessage('${id}')`}" 
+                        ${entry.verified ? 'disabled' : ''}>
+                  <i class="fas fa-check-circle me-1"></i> ${entry.verified ? 'Verified' : 'Verify'}
+                </button>
+              </div>
+            </div>
+          `;
+
+          container.appendChild(div);
+        });
+      });
+    }
+
+    function verifyMessage(id) {
+      db.ref(`submissions/${id}`).update({ verified: true });
+    }
+
+    function deleteSelected() {
+      const checkboxes = document.querySelectorAll('.select-checkbox:checked');
+      if (checkboxes.length === 0) {
+        alert("Please select at least one message to delete.");
+        return;
+      }
+
+      if (!confirm(`Are you sure you want to delete ${checkboxes.length} submission(s)? This action cannot be undone.`)) return;
+
+      checkboxes.forEach(cb => {
+        db.ref(`submissions/${cb.value}`).remove();
+      });
+    }
+
+    // Add select all functionality
+    document.getElementById('selectAll').addEventListener('change', function() {
+      const checkboxes = document.querySelectorAll('.select-checkbox');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = this.checked;
+      });
+    });
+
+    // Initialize the dashboard
+    loadMessages();
+  </script>
+</body>
+  </html>
