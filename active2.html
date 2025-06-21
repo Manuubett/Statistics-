@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MatchDataHub - Admin Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h2 class="mb-4">🛡️ Admin Panel - User Access</h2>
+
+    <!-- User Counters -->
+    <div class="mb-4 d-flex gap-3">
+      <span class="badge bg-success fs-6" id="activeCount">Active Users: 0</span>
+      <span class="badge bg-secondary fs-6" id="disabledCount">Disabled Users: 0</span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Time Left</th>
+            <th>Toggle Access</th>
+          </tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      onSnapshot,
+      doc,
+      updateDoc
+    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDthFB2btT_r6slyX_xa5jeDOX8KDxsmdo",
+      authDomain: "store-1d9e8.firebaseapp.com",
+      projectId: "store-1d9e8",
+      storageBucket: "store-1d9e8.firebasestorage.app",
+      messagingSenderId: "869478006120",
+      appId: "1:869478006120:web:2045cbb98db8a3755e6add",
+      measurementId: "G-3GCBWGCYPG"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const userTable = document.getElementById("userTable");
+    const activeCount = document.getElementById("activeCount");
+    const disabledCount = document.getElementById("disabledCount");
+    const timers = {};
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      return `${hours}:${minutes}:${seconds}`;
+    }
+
+    onSnapshot(collection(db, "public_users"), async snapshot => {
+      userTable.innerHTML = "";
+      for (const key in timers) clearInterval(timers[key]);
+
+      let activeUsers = 0;
+      let disabledUsers = 0;
+      const now = new Date();
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const userRef = doc(db, "public_users", docSnap.id);
+
+        // Auto-disable check
+        if (!data.disabled && data.enabledAt) {
+          const enabledTime = data.enabledAt.toDate();
+          const timeDiff = now - enabledTime;
+          if (timeDiff > 24 * 60 * 60 * 1000) {
+            await updateDoc(userRef, { disabled: true, enabledAt: null });
+            continue;
+          }
+        }
+
+        const tr = document.createElement("tr");
+        const status = data.disabled ? "❌ Disabled" : "✅ Enabled";
+        const toggleText = data.disabled ? "Enable" : "Disable";
+        const countdownId = `countdown-${docSnap.id}`;
+
+        if (data.disabled) {
+          disabledUsers++;
+        } else {
+          activeUsers++;
+        }
+
+        tr.innerHTML = `
+          <td>${data.name}</td>
+          <td>${status}</td>
+          <td id="${countdownId}">${data.disabled || !data.enabledAt ? '-' : 'Calculating...'}</td>
+          <td>
+            <button class="btn btn-sm ${data.disabled ? 'btn-success' : 'btn-danger'}"
+              onclick="toggleUser('${docSnap.id}', ${data.disabled})">
+              ${toggleText}
+            </button>
+          </td>
+        `;
+
+        userTable.appendChild(tr);
+
+        // Countdown timer
+        if (!data.disabled && data.enabledAt) {
+          const targetTime = data.enabledAt.toDate().getTime() + 12 * 60 * 60 * 1000;
+
+          timers[docSnap.id] = setInterval(() => {
+            const now = new Date().getTime();
+            const remaining = targetTime - now;
+            const el = document.getElementById(countdownId);
+            if (el) {
+              if (remaining <= 0) {
+                el.textContent = "Expired";
+                clearInterval(timers[docSnap.id]);
+              } else {
+                el.textContent = formatTime(remaining);
+              }
+            }
+          }, 1000);
+        }
+      }
+
+      // Update counters
+      activeCount.textContent = `Active Users: ${activeUsers}`;
+      disabledCount.textContent = `Disabled Users: ${disabledUsers}`;
+    });
+
+    // Toggle function
+    window.toggleUser = async (userId, currentlyDisabled) => {
+      const userRef = doc(db, "public_users", userId);
+      if (currentlyDisabled) {
+        await updateDoc(userRef, {
+          disabled: false,
+          enabledAt: new Date()
+        });
+      } else {
+        await updateDoc(userRef, {
+          disabled: true,
+          enabledAt: null
+        });
+      }
+    };
+  </script>
+</body>
+</html>
